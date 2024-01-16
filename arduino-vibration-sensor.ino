@@ -12,6 +12,14 @@ class Utils {
       }
       return "false";
     }
+    static int setInt(String command, int& i, int lower, int upper) {
+      int tempMin = command.toInt();
+      if (tempMin >= lower && tempMin <= upper) {
+          i = tempMin;
+          return 1;
+      }
+      return -1;
+    }
 };
 
 U8G2_SSD1327_EA_W128128_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
@@ -93,6 +101,62 @@ void Utils::publish(String s) {
   }
 }
 
+class PublishRateHandler {
+  public:
+    int publishRateInSeconds = 2;
+
+    int setPublishRate(String cmd) {
+      return Utils::setInt(cmd, publishRateInSeconds, 1, 60);
+    }
+};
+PublishRateHandler publishRateHandler;
+
+class SensorHandler {
+  private:
+    int seconds_for_sample = 1;
+
+    const int PIEZO_PIN_UNWEIGHTED = A0;
+    const int PIEZO_PIN_WEIGHTED = A1;
+    const int WAIT_BETWEEN_READS_MS = 25;
+    const int NUM_SAMPLES = (seconds_for_sample * 1000) / 25;
+
+    float getVoltage(int pin) {
+      float total_piezo_0 = 0.0;
+      for (int i = 0; i < NUM_SAMPLES; i++) {
+        int piezoADC = analogRead(pin);
+        float piezoV = piezoADC / 1023.0 * 5.0;
+        total_piezo_0 += piezoV;
+        delay(WAIT_BETWEEN_READS_MS);
+      }
+      return total_piezo_0 / NUM_SAMPLES;
+    }
+    void  sample_and_publish_(int pin, String theType) {
+      float v = getVoltage(pin);
+      String val1(v);
+      String event("Voltage ");
+      event.concat(theType);
+      event.concat(" sensor");
+      String s(event);
+      s.concat(": ");
+      s.concat(v);
+      Utils::publish(s);
+      oledWrapper.drawString(s);
+      int theDelay = publishRateHandler.publishRateInSeconds - seconds_for_sample;
+      delay(theDelay * 1000);
+    }
+  public:
+    SensorHandler() {
+      pinMode(PIEZO_PIN_UNWEIGHTED, INPUT);
+      pinMode(PIEZO_PIN_WEIGHTED, INPUT);
+    }
+    int sample_and_publish() {
+      sample_and_publish_(PIEZO_PIN_UNWEIGHTED, "unweighted");
+      sample_and_publish_(PIEZO_PIN_WEIGHTED, "weighted");
+      return 1;
+    }
+};
+SensorHandler sensorHandler;
+
 const String githubRepo("https://github.com/chrisxkeith/arduino-vibration-sensor");
 
 class App {
@@ -141,6 +205,7 @@ class App {
       const int DISPLAY_RATE_IN_MS = 2000;
       int thisMS = millis();
       if (thisMS - lastDisplay > DISPLAY_RATE_IN_MS) {
+        sensorHandler.sample_and_publish();
         const int SHIFT_RATE = 1000 * 60 * 2; // Shift display every 2 minutes to avoid OLED burn-in.
         if (thisMS - lastShift > SHIFT_RATE) {
           oledWrapper.shiftDisplay(2);
