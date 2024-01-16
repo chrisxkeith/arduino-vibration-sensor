@@ -121,17 +121,19 @@ class SensorHandler {
     const int NUM_SAMPLES = (seconds_for_sample * 1000) / 25;
 
     float getVoltage(int pin) {
+        int piezoADC = analogRead(pin);
+        return piezoADC / 1023.0 * 5.0;
+    }
+    float getAverageVoltage(int pin) {
       float total_piezo_0 = 0.0;
       for (int i = 0; i < NUM_SAMPLES; i++) {
-        int piezoADC = analogRead(pin);
-        float piezoV = piezoADC / 1023.0 * 5.0;
-        total_piezo_0 += piezoV;
+        total_piezo_0 += getVoltage(pin);
         delay(WAIT_BETWEEN_READS_MS);
       }
       return total_piezo_0 / NUM_SAMPLES;
     }
-    void  sample_and_publish_(int pin, String theType) {
-      float v = getVoltage(pin);
+    void sample_and_publish_(int pin, String theType) {
+      float v = getAverageVoltage(pin);
       String val1(v);
       String event("Voltage ");
       event.concat(theType);
@@ -153,6 +155,19 @@ class SensorHandler {
       sample_and_publish_(PIEZO_PIN_UNWEIGHTED, "unweighted");
       sample_and_publish_(PIEZO_PIN_WEIGHTED, "weighted");
       return 1;
+    }
+    void getAverageReadTime() {
+      int t = 0;
+      const int NUM_READS = 100;
+      for (int i = 0; i < NUM_READS; i++) {
+        int now = millis();
+        getVoltage(A0);
+        t += (millis() - now);
+      }
+      String s("100 reads: ");
+      s.concat(t);
+      Utils::publish(s);
+      oledWrapper.drawString(s);
     }
 };
 SensorHandler sensorHandler;
@@ -205,7 +220,7 @@ class App {
       const int DISPLAY_RATE_IN_MS = 2000;
       int thisMS = millis();
       if (thisMS - lastDisplay > DISPLAY_RATE_IN_MS) {
-        sensorHandler.sample_and_publish();
+        sensorHandler.getAverageReadTime();
         const int SHIFT_RATE = 1000 * 60 * 2; // Shift display every 2 minutes to avoid OLED burn-in.
         if (thisMS - lastShift > SHIFT_RATE) {
           oledWrapper.shiftDisplay(2);
