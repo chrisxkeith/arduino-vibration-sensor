@@ -132,14 +132,13 @@ PublishRateHandler publishRateHandler;
 
 class SensorHandler {
   private:
-    int seconds_for_sample = 1;
+    const int MS_FOR_SAMPLE = 1000;
     float max_weighted = __FLT_MIN__;
     float max_unweighted = __FLT_MIN__;
+    int total_reads = 0;
 
     const int PIEZO_PIN_UNWEIGHTED = A0;
     const int PIEZO_PIN_WEIGHTED = A1;
-    const int WAIT_BETWEEN_READS_MS = 25;
-    const int NUM_SAMPLES = (seconds_for_sample * 1000) / 25;
 
     float getVoltage(int pin) {
         int piezoADC = analogRead(pin);
@@ -148,7 +147,9 @@ class SensorHandler {
     void getVoltages() {
       max_weighted = __FLT_MIN__;
       max_unweighted = __FLT_MIN__;
-      for (int i = 0; i < NUM_SAMPLES; i++) {
+      total_reads = 0;
+      int then = millis();
+      while (millis() - then < MS_FOR_SAMPLE) {
         float piezoV = getVoltage(PIEZO_PIN_WEIGHTED);
         if (piezoV > max_weighted) {
           max_weighted = piezoV;
@@ -157,7 +158,7 @@ class SensorHandler {
         if (piezoV > max_unweighted) {
           max_unweighted = piezoV;
         }
-        delay(WAIT_BETWEEN_READS_MS);
+        total_reads++;
       }
     }
   public:
@@ -170,9 +171,10 @@ class SensorHandler {
       String json("{");
       JSonizer::addFirstSetting(json, "max_weighted", String(max_weighted));
       JSonizer::addSetting(json, "max_unweighted", String(max_unweighted));
+      JSonizer::addSetting(json, "total_reads", String(total_reads));
       json.concat("}");
       Utils::publish(json);
-      int theDelay = publishRateHandler.publishRateInSeconds - seconds_for_sample;
+      int theDelay = publishRateHandler.publishRateInSeconds - (MS_FOR_SAMPLE / 1000);
       delay(theDelay * 1000);
       return 1;
     }
