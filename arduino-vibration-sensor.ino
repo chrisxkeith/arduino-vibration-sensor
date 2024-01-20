@@ -22,6 +22,33 @@ class Utils {
     }
 };
 
+class JSonizer {
+  public:
+    static void addFirstSetting(String& json, String key, String val);
+    static void addSetting(String& json, String key, String val);
+    static String toString(bool b);
+};
+
+void JSonizer::addFirstSetting(String& json, String key, String val) {
+    json.concat("\"");
+    json.concat(key);
+    json.concat("\":\"");
+    json.concat(val);
+    json.concat("\"");
+}
+
+void JSonizer::addSetting(String& json, String key, String val) {
+    json.concat(",");
+    addFirstSetting(json, key, val);
+}
+
+String JSonizer::toString(bool b) {
+    if (b) {
+        return "true";
+    }
+    return "false";
+}
+
 U8G2_SSD1327_EA_W128128_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 class OLEDWrapper {
@@ -88,17 +115,9 @@ OLEDWrapper oledWrapper;
 
 void Utils::publish(String s) {
   if (DO_SERIAL) {
-    char buf[100];
-    int totalSeconds = millis() / 1000;
-    int secs = totalSeconds % 60;
-    int minutes = (totalSeconds / 60) % 60;
-    int hours = (totalSeconds / 60) / 60;
-    sprintf(buf, "%02u:%02u:%02u", hours, minutes, secs);
-    String s1(buf);
-    s1.concat(" ");
-    s1.concat(s);
-    Serial.println(s1);
+    Serial.println(s);
   }
+  oledWrapper.drawString(s);
 }
 
 class PublishRateHandler {
@@ -114,6 +133,8 @@ PublishRateHandler publishRateHandler;
 class SensorHandler {
   private:
     int seconds_for_sample = 1;
+    float max_weighted = __FLT_MIN__;
+    float max_unweighted = __FLT_MIN__;
 
     const int PIEZO_PIN_UNWEIGHTED = A0;
     const int PIEZO_PIN_WEIGHTED = A1;
@@ -124,27 +145,20 @@ class SensorHandler {
         int piezoADC = analogRead(pin);
         return piezoADC / 1023.0 * 5.0;
     }
-    float getAverageVoltage(int pin) {
-      float total_piezo_0 = 0.0;
+    void getVoltages() {
+      max_weighted = __FLT_MIN__;
+      max_unweighted = __FLT_MIN__;
       for (int i = 0; i < NUM_SAMPLES; i++) {
-        total_piezo_0 += getVoltage(pin);
+        float piezoV = getVoltage(PIEZO_PIN_WEIGHTED);
+        if (piezoV > max_weighted) {
+          max_weighted = piezoV;
+        }
+        piezoV = getVoltage(PIEZO_PIN_UNWEIGHTED);
+        if (piezoV > max_unweighted) {
+          max_unweighted = piezoV;
+        }
         delay(WAIT_BETWEEN_READS_MS);
       }
-      return total_piezo_0 / NUM_SAMPLES;
-    }
-    void sample_and_publish_(int pin, String theType) {
-      float v = getAverageVoltage(pin);
-      String val1(v);
-      String event("Voltage ");
-      event.concat(theType);
-      event.concat(" sensor");
-      String s(event);
-      s.concat(": ");
-      s.concat(v);
-      Utils::publish(s);
-      oledWrapper.drawString(s);
-      int theDelay = publishRateHandler.publishRateInSeconds - seconds_for_sample;
-      delay(theDelay * 1000);
     }
   public:
     SensorHandler() {
@@ -152,8 +166,14 @@ class SensorHandler {
       pinMode(PIEZO_PIN_WEIGHTED, INPUT);
     }
     int sample_and_publish() {
-      sample_and_publish_(PIEZO_PIN_UNWEIGHTED, "unweighted");
-      sample_and_publish_(PIEZO_PIN_WEIGHTED, "weighted");
+      getVoltages();
+      String json("{");
+      JSonizer::addFirstSetting(json, "max_weighted", String(max_weighted));
+      JSonizer::addSetting(json, "max_unweighted", String(max_unweighted));
+      json.concat("}");
+      Utils::publish(json);
+      int theDelay = publishRateHandler.publishRateInSeconds - seconds_for_sample;
+      delay(theDelay * 1000);
       return 1;
     }
     void getAverageReadTime() {
@@ -166,8 +186,8 @@ class SensorHandler {
       }
       String s("100 reads: ");
       s.concat(t);
+      s.concat(" ms");
       Utils::publish(s);
-      oledWrapper.drawString(s);
     }
 };
 SensorHandler sensorHandler;
@@ -214,13 +234,12 @@ class App {
       oledWrapper.setup_OLED();
       delay(1000);
       Utils::publish("Finished setup...");
-      oledWrapper.drawString("Finished setup...");
     }
     void loop() {
       const int DISPLAY_RATE_IN_MS = 2000;
       int thisMS = millis();
       if (thisMS - lastDisplay > DISPLAY_RATE_IN_MS) {
-        sensorHandler.getAverageReadTime();
+        sensorHandler.sample_and_publish();
         const int SHIFT_RATE = 1000 * 60 * 2; // Shift display every 2 minutes to avoid OLED burn-in.
         if (thisMS - lastShift > SHIFT_RATE) {
           oledWrapper.shiftDisplay(2);
