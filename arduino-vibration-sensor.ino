@@ -49,12 +49,37 @@ String JSonizer::toString(bool b) {
     return "false";
 }
 
+class ScreenBuffer {
+  private:
+    const int         MAX_LENGTH = 12;
+    int               next_line = 0;
+  public:
+    const static int  MAX_LINES = 4;
+    String            lines_of_text[MAX_LINES];
+
+    void addText(String msg) {
+      while (msg.length() > 0) {
+        if (next_line == MAX_LINES - 1) {
+          for (int i = 1; i < MAX_LINES; i++) {
+            lines_of_text[i - 1] = lines_of_text[i];
+          }
+        } else {
+          next_line++;
+        }
+        lines_of_text[next_line] = msg.substring(0, MAX_LENGTH);
+        msg.remove(0, MAX_LENGTH);
+      }
+    }
+};
+
 U8G2_SSD1327_EA_W128128_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 class OLEDWrapper {
   private:
-      const int START_BASELINE = 50;
-      int   baseLine = START_BASELINE;
+      const int     START_BASELINE = 50;
+      int           baseLine = START_BASELINE;
+      ScreenBuffer  screenBuffer;
+      const int     SMALL_FONT_HEIGHT = 20;
   public:
     void u8g2_prepare(void) {
       u8g2.setFont(u8g2_font_fur49_tn);
@@ -69,13 +94,19 @@ class OLEDWrapper {
       u8g2.drawLine(127, 95, 127, 0);  
       u8g2.drawLine(127, 0, 0, 0);  
     }
-    
+
     void drawString(String s) {
+      screenBuffer.addText(s);
       u8g2.firstPage();
       do {
           u8g2_prepare();
           u8g2.setFont(u8g2_font_fur11_tf);
-          u8g2.drawUTF8(6, this->baseLine, s.c_str());
+          int baseLine = 0;
+          for (int i = 0; i < screenBuffer.MAX_LINES; i++) {
+            baseLine += SMALL_FONT_HEIGHT;
+            u8g2.drawUTF8(6, baseLine, screenBuffer.lines_of_text[i].c_str());
+
+          }
       } while( u8g2.nextPage() );
     }
 
@@ -85,7 +116,7 @@ class OLEDWrapper {
           u8g2_prepare();
           u8g2.drawUTF8(2, this->baseLine, String(val).c_str());
           u8g2.setFont(u8g2_font_fur11_tf);
-          u8g2.drawUTF8(6, this->baseLine + 20, "Fahrenheit");
+          u8g2.drawUTF8(6, this->baseLine + SMALL_FONT_HEIGHT, "Fahrenheit");
       } while( u8g2.nextPage() );
     }
 
