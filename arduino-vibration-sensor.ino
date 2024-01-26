@@ -1,6 +1,7 @@
 // Please credit chris.keith@gmail.com .
 
 #include <U8g2lib.h>
+#include <SD.h>
 
 class Utils {
   public:
@@ -48,6 +49,58 @@ String JSonizer::toString(bool b) {
     }
     return "false";
 }
+
+class SDWriter {
+  private:
+    File myFile;
+    bool didTest = false;
+  public:
+    SDWriter() {
+      Serial.println("Initializing SD card...");
+      pinMode(10, OUTPUT);
+      if (!SD.begin(10)) {
+        Serial.println("SD card initialization failed!");
+      } else {
+        Serial.println("SD card initialization done.");
+      }
+    }
+    void open(String fn) {
+      myFile = SD.open(fn.c_str(), FILE_WRITE);
+      if (!myFile) {
+        String s("error opening: ");
+        s.concat(fn);
+        Serial.println(s);
+      }
+    }
+    void close() {
+      if (myFile) {
+        myFile.close();
+      }
+    }
+    void write(String msg) {
+      if (myFile) {
+        myFile.println(msg.c_str());
+      }
+    }
+    void read(String fn) {
+      if (myFile) {
+        while (myFile.available()) {
+          Serial.write(myFile.read());
+        }
+      }
+    }
+    void test() {
+      if (!didTest) {
+        open("test.txt");
+        write("fubar");
+        close();
+        open("test.txt");
+        read("test.txt");
+        close();
+        didTest = true;
+      }
+    }
+};
 
 class ScreenBuffer {
   private:
@@ -231,6 +284,7 @@ class App {
   private:
     int lastDisplay = 0;
     int lastShift = 0;
+    SDWriter*  sdWriter;
 
     void status() {
       Utils::publish(githubRepo);
@@ -266,6 +320,7 @@ class App {
 
       oledWrapper.setup_OLED();
       delay(1000);
+      sdWriter = new SDWriter();
       Utils::publish("Finished setup...");
     }
     void loop() {
