@@ -1,6 +1,9 @@
 // Please credit chris.keith@gmail.com .
 
+#define USE_OLED false
+#if USE_OLED
 #include <U8g2lib.h>
+#endif
 #include <SD.h>
 
 class Utils {
@@ -83,25 +86,16 @@ class SDWriter {
       }
     }
     void read(String fn) {
+      // can't get read() to work, but don't need it.
       if (myFile) {
         while (myFile.available()) {
-          Serial.write(myFile.read());
+          Serial.println(myFile.read());
         }
-      }
-    }
-    void test() {
-      if (!didTest) {
-        open("test.txt");
-        write("fubar");
-        close();
-        open("test.txt");
-        read("test.txt");
-        close();
-        didTest = true;
       }
     }
 };
 
+#if USE_OLED
 class ScreenBuffer {
   private:
     const int         MAX_LENGTH = 12;
@@ -195,6 +189,26 @@ class OLEDWrapper {
       u8g2.setBusClock(400000);
     }
 };
+#else
+class OLEDWrapper {
+  public:
+    void u8g2_prepare(void) {
+    }    
+    void drawEdge() {
+    }
+    void drawString(String s) {
+    }
+    void drawInt(int val) {
+    }
+    void clear() {
+    }
+    void shiftDisplay(int shiftAmount) {
+    }
+    void setup_OLED() {
+    }
+};
+#endif
+
 OLEDWrapper oledWrapper;
 
 void Utils::publish(String s) {
