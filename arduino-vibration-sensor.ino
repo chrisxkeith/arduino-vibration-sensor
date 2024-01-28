@@ -246,6 +246,7 @@ class SensorHandler {
     float max_weighted = __FLT_MIN__;
     float max_unweighted = __FLT_MIN__;
     int total_reads = 0;
+    const float   CUTOFF = 0.01;
 
     const int PIEZO_PIN_UNWEIGHTED = A0;
     const int PIEZO_PIN_WEIGHTED = A1;
@@ -279,13 +280,16 @@ class SensorHandler {
     String getCSV() {
       getVoltages();
       String csv;
-      Utils::getTime(&csv);
-      csv.concat(",");
-      csv.concat(max_weighted);
-      csv.concat(",");
-      csv.concat(max_unweighted);
-      csv.concat(",");
-      csv.concat(total_reads);
+      if ((max_weighted >= CUTOFF) || (max_unweighted >= CUTOFF)) {
+        // only write "non-zero" values to reduce size of CSV data.
+        Utils::getTime(&csv);
+        csv.concat(",");
+        csv.concat(max_weighted);
+        csv.concat(",");
+        csv.concat(max_unweighted);
+        csv.concat(",");
+        csv.concat(total_reads);
+      }
       return csv;
     }
     bool sample_and_publish() {
@@ -325,6 +329,7 @@ class App {
     const String        CSV_FN = "VIBS.CSV";
     const unsigned long CLOSE_INTERVAL = 10 * 1000; // close and reopen every 10 seconds to flush data to card.
     unsigned long       nextClose = CLOSE_INTERVAL;
+    unsigned long       mostRecentWrites = 0;
 
     void status() {
       Utils::publish(githubRepo);
@@ -371,12 +376,20 @@ class App {
       // checkSerial();
     }
     void handleWrite() {
-      sdWriter->write(sensorHandler.getCSV().c_str());
+      String csv = sensorHandler.getCSV();
+      if (csv.length() > 0) {
+        sdWriter->write(csv.c_str());
+        mostRecentWrites++;
+      }
       if (millis() > nextClose) {
         sdWriter->close();
         sdWriter->open(CSV_FN);
         nextClose += CLOSE_INTERVAL;
-        Utils::publish("Flushed to SD card.");
+        String msg("Flushed to SD card: ");
+        msg.concat(mostRecentWrites);
+        msg.concat(" rows");
+        Utils::publish(msg);
+        mostRecentWrites = 0;
       }
       // sdWriter->flush(); // why the $*&$*&! won't this compile?
     }
