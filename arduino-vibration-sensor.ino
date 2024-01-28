@@ -276,11 +276,8 @@ class SensorHandler {
       pinMode(PIEZO_PIN_UNWEIGHTED, INPUT);
       pinMode(PIEZO_PIN_WEIGHTED, INPUT);
     }
-    bool sample_and_publish() {
+    String getCSV() {
       getVoltages();
-      if (total_reads == 0) {
-        return false;
-      }
       String csv;
       Utils::getTime(&csv);
       csv.concat(",");
@@ -289,7 +286,14 @@ class SensorHandler {
       csv.concat(max_unweighted);
       csv.concat(",");
       csv.concat(total_reads);
-      Utils::publish(csv);
+      return csv;
+    }
+    bool sample_and_publish() {
+      getVoltages();
+      if (total_reads == 0) {
+        return false;
+      }
+      Utils::publish(getCSV());
       int theDelay = publishRateHandler.publishRateInSeconds - (MS_FOR_SAMPLE / 1000);
       delay(theDelay * 1000);
       return true;
@@ -314,10 +318,13 @@ const String githubRepo("https://github.com/chrisxkeith/arduino-vibration-sensor
 
 class App {
   private:
-    int lastDisplay = 0;
-    int lastShift = 0;
-    SDWriter*  sdWriter;
-    unsigned int  nPublishes = 0;
+    int                 lastDisplay = 0;
+    int                 lastShift = 0;
+    SDWriter*           sdWriter;
+    unsigned int        nPublishes = 0;
+    const String        CSV_FN = "VIBS.CSV";
+    const unsigned long CLOSE_INTERVAL = 10 * 1000; // close and reopen every 10 seconds to flush data to card.
+    unsigned long       nextClose = CLOSE_INTERVAL;
 
     void status() {
       Utils::publish(githubRepo);
@@ -342,21 +349,7 @@ class App {
         }
       }
     }
-  public:
-    void setup() {
-      if (Utils::DO_SERIAL) {
-        Serial.begin(57600);
-        delay(1000);
-      }
-      Utils::publish("Started setup...");
-      status();
-
-      oledWrapper.setup_OLED();
-      delay(1000);
-      sdWriter = new SDWriter();
-      Utils::publish("Finished setup...");
-    }
-    void loop() {
+    void handleDisplay() {
       const int DISPLAY_RATE_IN_MS = 2000;
       unsigned long thisMS = millis();
       if (thisMS - lastDisplay > DISPLAY_RATE_IN_MS) {
@@ -376,6 +369,35 @@ class App {
         lastDisplay = thisMS;
       }
       // checkSerial();
+    }
+    void handleWrite() {
+      sdWriter->write(sensorHandler.getCSV().c_str());
+      if (millis() > nextClose) {
+        sdWriter->close();
+        sdWriter->open(CSV_FN);
+        nextClose += CLOSE_INTERVAL;
+        Utils::publish("Flushed to SD card.");
+      }
+      // sdWriter->flush(); // why the $*&$*&! won't this compile?
+    }
+  public:
+    void setup() {
+      if (Utils::DO_SERIAL) {
+        Serial.begin(57600);
+        delay(1000);
+      }
+      Utils::publish("Started setup...");
+      status();
+
+      oledWrapper.setup_OLED();
+      delay(1000);
+      sdWriter = new SDWriter();
+      delay(1000);
+      sdWriter->open(CSV_FN);
+      Utils::publish("Finished setup...");
+    }
+    void loop() {
+      handleWrite();
     }
 };
 App app;
