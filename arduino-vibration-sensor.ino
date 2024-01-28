@@ -245,7 +245,9 @@ class SensorHandler {
     const int MS_FOR_SAMPLE = 1000;
     float max_weighted = __FLT_MIN__;
     float max_unweighted = __FLT_MIN__;
-    int total_reads = 0;
+    float         weighted = 0.0;
+    float         unweighted = 0.0;
+    int           total_reads = 0;
     const float   CUTOFF = 0.01;
 
     const int PIEZO_PIN_UNWEIGHTED = A0;
@@ -254,6 +256,10 @@ class SensorHandler {
     float getVoltage(int pin) {
         int piezoADC = analogRead(pin);
         return piezoADC / 1023.0 * 5.0;
+    }
+    void getVoltage() {
+      weighted = getVoltage(PIEZO_PIN_WEIGHTED);
+      unweighted = getVoltage(PIEZO_PIN_UNWEIGHTED);
     }
     void getVoltages() {
       max_weighted = __FLT_MIN__;
@@ -272,25 +278,32 @@ class SensorHandler {
         total_reads++;
       }
     }
+    String buildCSV(float w, float unw) {
+      String csv;
+      if ((w >= CUTOFF) || (unw >= CUTOFF)) {
+        // only write "non-zero" values to reduce size of CSV data.
+        Utils::getTime(&csv);
+        csv.concat(",");
+        csv.concat(w);
+        csv.concat(",");
+        csv.concat(unw);
+        csv.concat(",");
+        csv.concat(total_reads);
+      }
+      return csv;
+    }
   public:
     SensorHandler() {
       pinMode(PIEZO_PIN_UNWEIGHTED, INPUT);
       pinMode(PIEZO_PIN_WEIGHTED, INPUT);
     }
-    String getCSV() {
+    String getCSVOfMax() {
       getVoltages();
-      String csv;
-      if ((max_weighted >= CUTOFF) || (max_unweighted >= CUTOFF)) {
-        // only write "non-zero" values to reduce size of CSV data.
-        Utils::getTime(&csv);
-        csv.concat(",");
-        csv.concat(max_weighted);
-        csv.concat(",");
-        csv.concat(max_unweighted);
-        csv.concat(",");
-        csv.concat(total_reads);
-      }
-      return csv;
+      return buildCSV(max_weighted, max_unweighted);
+    }
+    String getCSV() {
+      getVoltage();
+      return buildCSV(weighted, unweighted);
     }
     bool sample_and_publish() {
       getVoltages();
@@ -407,6 +420,8 @@ class App {
       sdWriter = new SDWriter();
       delay(1000);
       sdWriter->open(CSV_FN);
+      delay(1000);
+      sdWriter->write("time,weighted,unweighted");
       Utils::publish("Finished setup...");
     }
     void loop() {
