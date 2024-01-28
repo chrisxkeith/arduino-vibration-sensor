@@ -24,6 +24,18 @@ class Utils {
       }
       return -1;
     }
+    static void getTime(String* t) {
+      unsigned long now = millis();
+      unsigned long allSeconds = now / 1000;
+      int runMillis = now % 1000;
+      int runHours = allSeconds / 3600;
+      int secsRemaining = allSeconds % 3600;
+      int runMinutes = secsRemaining / 60;
+      int runSeconds = secsRemaining % 60;
+      char buf[21];
+      sprintf(buf,"%02d:%02d:%02d.%03d", runHours, runMinutes, runSeconds, runMillis);
+      t->concat(buf);
+    }
 };
 
 class JSonizer {
@@ -246,7 +258,7 @@ class SensorHandler {
       max_weighted = __FLT_MIN__;
       max_unweighted = __FLT_MIN__;
       total_reads = 0;
-      int then = millis();
+      unsigned long then = millis();
       while (millis() - then < MS_FOR_SAMPLE) {
         float piezoV = getVoltage(PIEZO_PIN_WEIGHTED);
         if (piezoV > max_weighted) {
@@ -269,7 +281,10 @@ class SensorHandler {
       if (total_reads == 0) {
         return false;
       }
-      String csv(max_weighted);
+      String csv;
+      Utils::getTime(&csv);
+      csv.concat(",");
+      csv.concat(max_weighted);
       csv.concat(",");
       csv.concat(max_unweighted);
       csv.concat(",");
@@ -280,10 +295,10 @@ class SensorHandler {
       return true;
     }
     void getAverageReadTime() {
-      int t = 0;
+      unsigned long t = 0;
       const int NUM_READS = 100;
       for (int i = 0; i < NUM_READS; i++) {
-        int now = millis();
+        unsigned long now = millis();
         getVoltage(A0);
         t += (millis() - now);
       }
@@ -310,7 +325,7 @@ class App {
 
     void checkSerial() {
       if (Utils::DO_SERIAL) {
-        int now = millis();
+        unsigned long now = millis();
         while (Serial.available() == 0) {
           if (millis() - now > 500) {
             return;
@@ -343,7 +358,7 @@ class App {
     }
     void loop() {
       const int DISPLAY_RATE_IN_MS = 2000;
-      int thisMS = millis();
+      unsigned long thisMS = millis();
       if (thisMS - lastDisplay > DISPLAY_RATE_IN_MS) {
         if (!sensorHandler.sample_and_publish()) {
           String msg("Reads failed after ");
