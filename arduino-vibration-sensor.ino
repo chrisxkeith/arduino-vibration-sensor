@@ -264,17 +264,20 @@ class SensorHandler {
       pinMode(PIEZO_PIN_UNWEIGHTED, INPUT);
       pinMode(PIEZO_PIN_WEIGHTED, INPUT);
     }
-    int sample_and_publish() {
+    bool sample_and_publish() {
       getVoltages();
-      String json("{");
-      JSonizer::addFirstSetting(json, "max_weighted", String(max_weighted));
-      JSonizer::addSetting(json, "max_unweighted", String(max_unweighted));
-      JSonizer::addSetting(json, "total_reads", String(total_reads));
-      json.concat("}");
-      Utils::publish(json);
+      if (total_reads == 0) {
+        return false;
+      }
+      String csv(max_weighted);
+      csv.concat(",");
+      csv.concat(max_unweighted);
+      csv.concat(",");
+      csv.concat(total_reads);
+      Utils::publish(csv);
       int theDelay = publishRateHandler.publishRateInSeconds - (MS_FOR_SAMPLE / 1000);
       delay(theDelay * 1000);
-      return 1;
+      return true;
     }
     void getAverageReadTime() {
       int t = 0;
@@ -299,6 +302,7 @@ class App {
     int lastDisplay = 0;
     int lastShift = 0;
     SDWriter*  sdWriter;
+    unsigned int  nPublishes = 0;
 
     void status() {
       Utils::publish(githubRepo);
@@ -341,7 +345,14 @@ class App {
       const int DISPLAY_RATE_IN_MS = 2000;
       int thisMS = millis();
       if (thisMS - lastDisplay > DISPLAY_RATE_IN_MS) {
-        sensorHandler.sample_and_publish();
+        if (!sensorHandler.sample_and_publish()) {
+          String msg("Reads failed after ");
+          msg.concat(nPublishes);
+          msg.concat(" publishs.");
+          Utils::publish(msg);
+        } else {
+          nPublishes++;
+        }
         const int SHIFT_RATE = 1000 * 60 * 2; // Shift display every 2 minutes to avoid OLED burn-in.
         if (thisMS - lastShift > SHIFT_RATE) {
           oledWrapper.shiftDisplay(2);
@@ -349,7 +360,7 @@ class App {
         }
         lastDisplay = thisMS;
       }
-      checkSerial();
+      // checkSerial();
     }
 };
 App app;
