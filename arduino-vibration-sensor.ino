@@ -79,13 +79,15 @@ class SDWriter {
         Serial.println("SD card initialization done.");
       }
     }
-    void open(String fn) {
+    bool open(String fn) {
       myFile = SD.open(fn.c_str(), FILE_WRITE);
       if (!myFile) {
         String s("error opening: ");
         s.concat(fn);
         Serial.println(s);
+        return false;
       }
+      return true;
     }
     void close() {
       if (myFile) {
@@ -396,12 +398,13 @@ class App {
       }
       if (millis() > nextClose) {
         sdWriter->close();
-        sdWriter->open(CSV_FN);
+        if (sdWriter->open(CSV_FN)) {
+          String msg("Flushed to SD card: ");
+          msg.concat(mostRecentWrites);
+          msg.concat(" rows");
+          Utils::publish(msg);
+        }
         nextClose += CLOSE_INTERVAL;
-        String msg("Flushed to SD card: ");
-        msg.concat(mostRecentWrites);
-        msg.concat(" rows");
-        Utils::publish(msg);
         mostRecentWrites = 0;
       }
       // sdWriter->flush(); // why the $*&$*&! won't this compile?
