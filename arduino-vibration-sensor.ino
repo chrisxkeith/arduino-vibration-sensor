@@ -65,6 +65,25 @@ String JSonizer::toString(bool b) {
     return "false";
 }
 
+#define USE_SERIAL true
+
+#if USE_SERIAL
+class SDWriter {
+  public:
+    SDWriter() {
+    }
+    bool open(String fn) {
+      return false;
+    }
+    void close() {
+    }
+    void write(String msg) {
+      Utils::publish(msg);
+    }
+    void read(String fn) {
+    }
+};
+#else
 class SDWriter {
   private:
     File myFile;
@@ -108,6 +127,7 @@ class SDWriter {
       }
     }
 };
+#endif
 
 #if USE_OLED
 class ScreenBuffer {
