@@ -327,6 +327,35 @@ class SensorHandler {
       getVoltage();
       return buildCSV(weighted, unweighted);
     }
+    String getRawValues() {
+      uint16_t A0_val = 0;
+      uint16_t A1_val = 0;
+      uint16_t num_reads = 0;
+      unsigned long then = millis();
+      while (millis() - then < MS_FOR_SAMPLE) {
+      uint16_t raw = analogRead(A0);
+        if (raw > A0_val) {
+          A0_val = raw;
+        }
+        raw = analogRead(A1);
+        if (raw > A1_val) {
+          A1_val = raw;
+        }
+        num_reads++;
+      }
+      String ret;
+      const uint16_t INT_CUTOFF = 5;
+      if (num_reads > 0 && (A0_val > INT_CUTOFF || A1_val > INT_CUTOFF)) {
+        Utils::getTime(&ret);
+        ret.concat(",");
+        ret.concat(A0_val);
+        ret.concat(",");
+        ret.concat(A1_val);
+        ret.concat(",");
+        ret.concat(num_reads);
+      }
+      return ret;
+    }
     bool sample_and_publish() {
       getVoltages();
       if (total_reads == 0) {
@@ -411,7 +440,7 @@ class App {
       // checkSerial();
     }
     void handleWrite() {
-      String csv = sensorHandler.getCSV();
+      String csv = sensorHandler.getRawValues();
       if (csv.length() > 0) {
         sdWriter->write(csv.c_str());
         mostRecentWrites++;
@@ -444,7 +473,7 @@ class App {
       delay(1000);
       sdWriter->open(CSV_FN);
       delay(1000);
-      sdWriter->write("time,weighted,unweighted");
+      sdWriter->write("time,A0,A1");
       Utils::publish("Finished setup...");
     }
     void loop() {
